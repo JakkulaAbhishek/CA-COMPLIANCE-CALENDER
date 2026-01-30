@@ -1,188 +1,137 @@
 import streamlit as st
-import random
-import time
+import pandas as pd
+import calendar
+from datetime import date
 
-# ---------------- PAGE CONFIG ----------------
+# ---------------- CONFIG ----------------
 st.set_page_config(
-    page_title="MindVault Game",
-    page_icon="🧠",
-    layout="centered"
+    page_title="Indian Festival Calendar (2026–2099)",
+    page_icon="📅",
+    layout="wide"
 )
 
-# ---------------- SESSION STATE ----------------
-if "score" not in st.session_state:
-    st.session_state.score = 0
-
-if "start_time" not in st.session_state:
-    st.session_state.start_time = None
-
-# ---------------- DARK MODE UI ----------------
+# ---------------- DARK UI ----------------
 st.markdown("""
 <style>
-
-/* FULL BLACK BACKGROUND */
 .stApp {
     background-color: #000000;
     color: #ffffff;
     font-family: 'Segoe UI', sans-serif;
 }
-
-/* REMOVE WHITE BLOCK */
 .block-container {
     background-color: #000000;
+    padding-top: 1.5rem;
 }
-
-/* CARDS */
-.card {
-    background: #111111;
-    padding: 25px;
-    border-radius: 15px;
-    border: 1px solid #333333;
-    margin-bottom: 20px;
-}
-
-/* HEADINGS */
-.big {
-    font-size: 34px;
-    font-weight: 700;
+h1, h2, h3 {
     color: #ffffff;
 }
-
-/* SCORE */
-.score {
-    font-size: 22px;
-    color: #00ff9c;
-}
-
-/* INPUTS */
-input, textarea {
+select, input {
     background-color: #000000 !important;
     color: #ffffff !important;
-    border: 1px solid #555555 !important;
 }
-
-/* BUTTONS */
-.stButton > button {
-    background-color: #000000;
-    color: #ffffff;
-    border: 1px solid #ffffff;
-    border-radius: 8px;
-    padding: 0.5em 1.2em;
+.calendar-box {
+    background: #0f0f0f;
+    border: 1px solid #2a2a2a;
+    border-radius: 14px;
+    padding: 18px;
+    height: 140px;
+}
+.day {
+    font-size: 22px;
     font-weight: 600;
 }
-
-.stButton > button:hover {
-    background-color: #ffffff;
-    color: #000000;
+.festival {
+    font-size: 13px;
+    color: #00ffcc;
 }
-
-/* SELECTBOX */
-div[data-baseweb="select"] > div {
-    background-color: #000000;
-    color: #ffffff;
-    border: 1px solid #555555;
+.weekday {
+    text-align: center;
+    font-weight: 700;
+    color: #aaaaaa;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
+# ---------------- FESTIVAL ENGINE ----------------
+def get_festivals(year):
+    """Major Indian festivals (fixed-date + approx movable)"""
+    return {
+        date(year, 1, 1): "New Year",
+        date(year, 1, 26): "Republic Day 🇮🇳",
+        date(year, 3, 25): "Holi",
+        date(year, 4, 14): "Dr Ambedkar Jayanti",
+        date(year, 8, 15): "Independence Day 🇮🇳",
+        date(year, 10, 2): "Gandhi Jayanti",
+        date(year, 10, 20): "Dussehra",
+        date(year, 11, 1): "Diwali",
+        date(year, 12, 25): "Christmas 🎄"
+    }
+
 # ---------------- HEADER ----------------
-st.markdown("<div class='big'>🧠 MindVault – Dark Mode</div>", unsafe_allow_html=True)
-st.write("Test your **logic, memory & reflex speed** ⚡")
+st.title("📅 Indian Festival Calendar")
+st.caption("Ultra-clean | Dark Mode | 2026 – 2099")
 
-st.markdown(f"<div class='score'>🎯 Score: {st.session_state.score}</div>", unsafe_allow_html=True)
+# ---------------- CONTROLS ----------------
+col1, col2 = st.columns(2)
+
+with col1:
+    year = st.selectbox("📆 Select Year", list(range(2026, 2100)))
+
+with col2:
+    month = st.selectbox(
+        "🗓 Select Month",
+        list(calendar.month_name)[1:]
+    )
+
+month_num = list(calendar.month_name).index(month)
+
+# ---------------- CALENDAR DATA ----------------
+cal = calendar.Calendar(calendar.SUNDAY)
+month_days = cal.monthdatescalendar(year, month_num)
+festivals = get_festivals(year)
+
+# ---------------- WEEK HEADER ----------------
+weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+cols = st.columns(7)
+for i, day in enumerate(weekdays):
+    cols[i].markdown(f"<div class='weekday'>{day}</div>", unsafe_allow_html=True)
+
+# ---------------- CALENDAR GRID ----------------
+for week in month_days:
+    cols = st.columns(7)
+    for i, day in enumerate(week):
+        if day.month == month_num:
+            fest = festivals.get(day, "")
+            cols[i].markdown(
+                f"""
+                <div class='calendar-box'>
+                    <div class='day'>{day.day}</div>
+                    <div class='festival'>{fest}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            cols[i].markdown(
+                "<div class='calendar-box'></div>",
+                unsafe_allow_html=True
+            )
+
+# ---------------- FESTIVAL LIST ----------------
 st.divider()
+st.subheader("🎉 Festivals This Year")
 
-# ---------------- MODE SELECT ----------------
-mode = st.selectbox(
-    "🎮 Select Game Mode",
-    ["Quick Math", "Memory Pattern", "Reaction Speed"]
+fest_list = [
+    {"Date": d.strftime("%d-%m-%Y"), "Festival": f}
+    for d, f in festivals.items()
+]
+
+df = pd.DataFrame(fest_list).sort_values("Date")
+st.dataframe(
+    df,
+    use_container_width=True,
+    hide_index=True
 )
 
-# ---------------- QUICK MATH ----------------
-if mode == "Quick Math":
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    a = random.randint(10, 99)
-    b = random.randint(10, 99)
-    operator = random.choice(["+", "-", "*"])
-
-    question = f"{a} {operator} {b}"
-    correct = eval(question)
-
-    st.subheader("🧮 Solve Quickly")
-    answer = st.number_input(f"{question} = ?", step=1)
-
-    if st.button("Submit"):
-        if answer == correct:
-            st.success("✅ Correct!")
-            st.session_state.score += 10
-        else:
-            st.error(f"❌ Wrong! Answer: {correct}")
-            st.session_state.score -= 5
-        st.experimental_rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# ---------------- MEMORY GAME ----------------
-elif mode == "Memory Pattern":
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.subheader("🧩 Memory Challenge")
-
-    pattern = [random.randint(1, 9) for _ in range(5)]
-    st.write("Memorize this 👀")
-    st.code(" ".join(map(str, pattern)))
-
-    time.sleep(3)
-    st.write("Enter the pattern:")
-
-    user_input = st.text_input("Numbers separated by space")
-
-    if st.button("Check"):
-        try:
-            user_pattern = list(map(int, user_input.split()))
-            if user_pattern == pattern:
-                st.success("🧠 Perfect!")
-                st.session_state.score += 15
-            else:
-                st.error(f"❌ Wrong! Pattern: {pattern}")
-                st.session_state.score -= 5
-        except:
-            st.warning("⚠ Invalid input")
-        st.experimental_rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# ---------------- REACTION SPEED ----------------
-elif mode == "Reaction Speed":
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.subheader("⚡ Reaction Speed Test")
-
-    if st.button("Start Test"):
-        time.sleep(random.uniform(2, 5))
-        st.session_state.start_time = time.time()
-        st.warning("CLICK NOW!")
-
-    if st.session_state.start_time:
-        if st.button("CLICK!"):
-            reaction = time.time() - st.session_state.start_time
-            st.session_state.start_time = None
-
-            st.info(f"⏱ Reaction Time: {reaction:.3f}s")
-
-            if reaction < 0.4:
-                st.success("🔥 Lightning Fast")
-                st.session_state.score += 20
-            elif reaction < 0.8:
-                st.success("👍 Good")
-                st.session_state.score += 10
-            else:
-                st.warning("🐢 Slow")
-                st.session_state.score += 2
-
-            st.experimental_rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
 # ---------------- FOOTER ----------------
-st.divider()
-st.caption("⚫ Pure Black UI • ⚪ White Text • 🚀 Built with Streamlit")
+st.caption("⚫ Pure Black UI • ⚪ White Typography • 🚀 Streamlit Pro Build")
