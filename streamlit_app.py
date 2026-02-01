@@ -1,63 +1,89 @@
-/**
- * Comprehensive CA Compliance Calendar 2025-26
- * Includes: TDS, GST (Monthly/QRMP), PF/ESI, Advance Tax, and ITR.
- */
+import streamlit as st
+import datetime
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+import os.path
+import pickle
 
-function setupComprehensiveCAEvents() {
-  const calendar = CalendarApp.getDefaultCalendar();
-  const year = 2025; // Setup for the 2025-26 cycle
+# --- APP CONFIGURATION ---
+st.set_page_config(page_title="CA Compliance Command Center", layout="wide")
+st.title("⚖️ CA Compliance Calendar Automator (2025-26)")
 
-  // 1. MONTHLY RECURRING EVENTS (Run for all 12 months)
-  for (let month = 0; month < 12; month++) {
-    const monthlyEvents = [
-      { name: "TDS Payment", day: 7, desc: "Deposit TDS for previous month. (Note: March TDS due by April 30)" },
-      { name: "GSTR-1 (Monthly)", day: 11, desc: "Filing of outward supplies for monthly filers" },
-      { name: "PF & ESI Payment", day: 15, desc: "Provident Fund and ESI contribution deposit" },
-      { name: "GSTR-3B (Monthly)", day: 20, desc: "Summary return & tax payment for monthly filers" }
-    ];
+# Google Calendar Scopes
+SCOPES = ['https://www.googleapis.com/auth/calendar']
 
-    monthlyEvents.forEach(e => {
-      // Special case: March TDS is due April 30
-      let day = (e.name === "TDS Payment" && month === 2) ? 30 : e.day; 
-      let targetMonth = (e.name === "TDS Payment" && month === 2) ? 3 : month;
-      createComplianceEvent(calendar, e.name, new Date(year, targetMonth, day), e.desc);
-    });
-  }
+def get_calendar_service():
+    """Authenticates the user and returns the Google Calendar service object."""
+    creds = None
+    # token.pickle stores user's access/refresh tokens
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+    
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            # You must have a 'credentials.json' file from Google Cloud Console
+            if not os.path.exists('credentials.json'):
+                st.error("Missing 'credentials.json'. Please upload it to your project folder.")
+                return None
+            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+            
+    return build('calendar', 'v3', credentials=creds)
 
-  // 2. QUARTERLY EVENTS (TDS Returns & GST QRMP)
-  const quarters = [
-    { name: "TDS Return Filing (Q1)", date: new Date(2025, 6, 31), desc: "Form 24Q/26Q for April-June" },
-    { name: "TDS Return Filing (Q2)", date: new Date(2025, 9, 31), desc: "Form 24Q/26Q for July-Sept" },
-    { name: "TDS Return Filing (Q3)", date: new Date(2026, 0, 31), desc: "Form 24Q/26Q for Oct-Dec" },
-    { name: "TDS Return Filing (Q4)", date: new Date(2026, 4, 31), desc: "Form 24Q/26Q for Jan-March" },
-    { name: "GSTR-1 (QRMP)", months: [6, 9, 0, 3], day: 13, desc: "Quarterly GSTR-1 filing" }
-  ];
-
-  quarters.forEach(q => {
-    if (q.date) {
-      createComplianceEvent(calendar, q.name, q.date, q.desc);
-    } else if (q.months) {
-      q.months.forEach(m => createComplianceEvent(calendar, q.name, new Date(m > 5 ? 2025 : 2026, m, q.day), q.desc));
+def create_compliance_event(service, title, date, description):
+    """Creates an all-day event in the primary Google Calendar."""
+    event = {
+        'summary': f"📌 COMPLIANCE: {title}",
+        'description': description,
+        'start': {'date': date.strftime('%Y-%m-%d')},
+        'end': {'date': (date + datetime.timedelta(days=1)).strftime('%Y-%m-%d')},
+        'reminders': {
+            'useDefault': False,
+            'overrides': [
+                {'method': 'email', 'minutes': 24 * 60},  # 1 day before
+                {'method': 'popup', 'minutes': 60},      # 1 hour before
+            ],
+        },
     }
-  });
+    service.events().insert(calendarId='primary', body=event).execute()
 
-  // 3. ADVANCE TAX (4 Installments)
-  const advTax = [
-    { name: "Advance Tax - 1st (15%)", date: new Date(2025, 5, 15) },
-    { name: "Advance Tax - 2nd (45%)", date: new Date(2025, 8, 15) },
-    { name: "Advance Tax - 3rd (75%)", date: new Date(2025, 11, 15) },
-    { name: "Advance Tax - 4th (100%)", date: new Date(2026, 2, 15) }
-  ];
-  advTax.forEach(t => createComplianceEvent(calendar, t.name, t.date, "Calculate & Pay Advance Tax if liability > ₹10,000"));
+# --- INTERFACE ---
+st.write("This app will automatically push all statutory due dates for FY 2025-26 to your Google Calendar.")
 
-  // 4. INCOME TAX RETURNS (ITR) & ANNUAL FILINGS
-  createComplianceEvent(calendar, "ITR Filing (Individuals/Non-Audit)", new Date(2025, 6, 31), "Deadline for ITR-1, 2, 4");
-  createComplianceEvent(calendar, "ITR Filing (Audit Cases/Companies)", new Date(2025, 9, 31), "Deadline for Corporate/Audit cases");
-  createComplianceEvent(calendar, "GST Annual Return (GSTR-9/9C)", new Date(2025, 11, 31), "Annual reconciliation for FY 2024-25");
-}
+if st.button("🚀 Generate & Sync All Compliance Dates"):
+    service = get_calendar_service()
+    if service:
+        year = 2025
+        # Define Compliances
+        # Monthly Filings
+        for month in range(1, 13):
+            # TDS Payment (7th of next month, April 30 for March)
+            tds_day = 30 if month == 3 else 7
+            tds_month = 4 if month == 3 else (month % 12) + 1
+            create_compliance_event(service, "TDS Payment", datetime.date(year, month, tds_day), "Deposit TDS for previous month.")
+            
+            # GSTR-1 & PF/ESI
+            create_compliance_event(service, "GSTR-1 (Monthly)", datetime.date(year, month, 11), "Filing outward supplies.")
+            create_compliance_event(service, "PF & ESI Payment", datetime.date(year, month, 15), "Deposit PF/ESI contributions.")
+            create_compliance_event(service, "GSTR-3B (Monthly)", datetime.date(year, month, 20), "Summary GST return.")
 
-function createComplianceEvent(cal, title, date, desc) {
-  const event = cal.createAllDayEvent("📌 COMPLIANCE: " + title, date, { description: desc });
-  event.addEmailReminder(1440); // 1 day before
-  event.addPopupReminder(60);   // 1 hour before
-}
+        # Quarterly/Annual Items
+        compliances = [
+            {"name": "TDS Return Filing (Q1)", "date": datetime.date(2025, 7, 31)},
+            {"name": "TDS Return Filing (Q2)", "date": datetime.date(2025, 10, 31)},
+            {"name": "Advance Tax (1st Inst.)", "date": datetime.date(2025, 6, 15)},
+            {"name": "ITR Filing (Individuals)", "date": datetime.date(2025, 7, 31)},
+            {"name": "ITR Filing (Companies/Audit)", "date": datetime.date(2025, 10, 31)},
+            {"name": "GSTR-9 (Annual)", "date": datetime.date(2025, 12, 31)},
+        ]
+        
+        for item in compliances:
+            create_compliance_event(service, item['name'], item['date'], "Statutory deadline.")
+            
+        st.success("All compliance dates have been successfully synced to your calendar!")
